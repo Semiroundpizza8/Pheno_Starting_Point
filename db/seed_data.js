@@ -171,6 +171,7 @@ async function expireReport(reportId) {
 async function testDB() {
   try {
     console.log("Filling DB with initial data");
+    console.log("Getting open reports:\n", await getOpenReports());
     
     const reports = await createInitialReports();
     await createInitialComments(reports);

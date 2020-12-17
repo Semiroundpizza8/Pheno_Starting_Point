@@ -1,9 +1,13 @@
 // Require the Client constructor from the pg package
+const { Client } = require('pg');
 
 // Create a constant, CONNECTION_STRING, from either process.env.DATABASE_URL or postgres://localhost:5432/phenomena-dev
+const CONNECTION_STRING = (process.env.DATABASE_URL || 'postgres:localhost:5432/phenomena-dev')
 
 // Create the client using new Client(CONNECTION_STRING)
 // Do not connect to the client in this file!
+const client = new Client(CONNECTION_STRING);
+
 
 /**
  * Report Related Methods
@@ -35,6 +39,45 @@ async function getOpenReports() {
 
 
     // finally, return the reports
+    
+    const resp = await client.query(`
+          SELECT *
+          FROM reports;
+          
+    `);
+
+    console.log(resp)
+    const query = `
+    SELECT * 
+    FROM comments
+    WHERE "reportId"
+    IN ();
+`
+console.log(query);
+    
+    const { rows: comments } = await client.query(`
+          SELECT * 
+          FROM comments
+          WHERE "reportId" 
+          IN (${reports});
+    `);
+
+    console.log({comments})
+    
+    const newReports = reports.map(report => {
+        const reportComments = comments.map(comment => {
+          return comment.reportId === report.id;
+        })
+          report.comments = reportComments;
+
+        if (Date.parse(report.expirationDate) < new Date()) {
+          report.isExpired = true
+        }
+
+        delete report.password;
+        return report;
+    })
+    return newReports;
   
 
   } catch (error) {
@@ -66,7 +109,16 @@ async function createReport(reportFields) {
     
 
     // return the new report
-    
+    const { title, location, description, password } = reportFields;
+
+    const { rows: [report] } = await client.query(`
+        INSERT INTO reports(title, location, description, password)
+        VALUES($1, $2, $3, $4)
+        RETURNING *;
+    `, [title, location, description, password])
+console.log(report);
+      delete report.password;
+      return report;
 
   } catch (error) {
     throw error;
@@ -178,3 +230,8 @@ async function createReportComment(reportId, commentFields) {
 }
 
 // export the client and all database functions below
+module.exports = {
+  client,
+  getOpenReports,
+  createReport
+}
