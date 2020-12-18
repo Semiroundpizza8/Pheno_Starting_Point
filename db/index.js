@@ -40,26 +40,19 @@ async function getOpenReports() {
 
     // finally, return the reports
     
-    const resp = await client.query(`
+    const { rows: reports } = await client.query(`
           SELECT *
-          FROM reports;
-          
+          FROM reports
+          WHERE "isOpen"=true;
     `);
+    const reportArr = reports.map((report) => {
+      return report.id;
+    });
 
-    console.log(resp)
-    const query = `
-    SELECT * 
-    FROM comments
-    WHERE "reportId"
-    IN ();
-`
-console.log(query);
-    
     const { rows: comments } = await client.query(`
           SELECT * 
           FROM comments
-          WHERE "reportId" 
-          IN (${reports});
+          WHERE "reportId" IN (${reportArr.join(', ')});
     `);
 
     console.log({comments})
@@ -77,9 +70,8 @@ console.log(query);
         delete report.password;
         return report;
     })
+    
     return newReports;
-  
-
   } catch (error) {
     throw error;
   }
@@ -116,7 +108,6 @@ async function createReport(reportFields) {
         VALUES($1, $2, $3, $4)
         RETURNING *;
     `, [title, location, description, password])
-console.log(report);
       delete report.password;
       return report;
 
@@ -145,8 +136,12 @@ async function _getReport(reportId) {
     
 
     // return the report
-    
-
+    const { rows: [ report ] } = await client.query(`
+        SELECT *
+        FROM reports
+        WHERE id=${reportId};
+    `)
+    return report;
   } catch (error) {
     throw error;
   }
@@ -180,6 +175,28 @@ async function closeReport(reportId, password) {
 
     // Return a message stating that the report has been closed
     
+    const report = await _getReport(reportId);
+    if (!report) {
+      throw {
+        name: "ReportNotFoundError",
+        message: "Could not find a report with that reportId"
+      };
+    }
+    if (report.password !== password) {
+      throw {
+        name: "PasswordMatchError",
+        message: "The passwords did not match"
+      };
+    }
+    if (!report.isOpen) {
+      throw {
+        name: "ReportClosedError",
+        message: "The report is already closed"
+      };
+    };
+
+    report.isOpen = false;
+    return {  name: "Closing Success", message: "Report has been closed" }
 
   } catch (error) {
     throw error;
@@ -199,11 +216,10 @@ async function closeReport(reportId, password) {
  */
 async function createReportComment(reportId, commentFields) {
   // read off the content from the commentFields
-
+  const { content } = commentFields
 
   try {
     // grab the report we are going to be commenting on
-
 
     // if it wasn't found, throw an error saying so
     
@@ -222,8 +238,41 @@ async function createReportComment(reportId, commentFields) {
     
 
     // finally, return the comment
-    
+    const report = await _getReport(reportId);
+    if (!report) {
+      throw {
+        name: "ReportNotFoundError",
+        message: "That report does not exist, no comment has been made"
+      };
+    }
+  
+    if (!report.isOpen) {
+      throw {
+        name: "ReportClosedError",
+        message: "That report has been closed, no comment has been made"
+      };
+    };
 
+    if (Date.parse(report.expirationDate) < new Date()) {
+      throw {
+        name: "ReportExpiredError",
+        message: "The discussion time on this report has expired, no comment has been made"
+      };
+    };
+    
+    const { rows: [ comment ] } = await client.query(`
+        INSERT INTO comments(content)
+        VALUES($1)
+        RETURNING *;
+    ` ,[content]);
+
+    comment.reportId = reportId;
+    
+    const extension = new Date();
+    extension.setDate(extension.getDate()+1);
+    report.expirationDate = Date.parse(extension);
+    console.log(comment)
+    return comment;
   } catch (error) {
     throw error;
   }
@@ -233,5 +282,8 @@ async function createReportComment(reportId, commentFields) {
 module.exports = {
   client,
   getOpenReports,
-  createReport
+  createReport,
+  createReportComment,
+  _getReport,
+  closeReport
 }
