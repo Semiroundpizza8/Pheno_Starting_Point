@@ -43,7 +43,7 @@ async function getOpenReports() {
     const { rows: reports } = await client.query(`
           SELECT *
           FROM reports
-          WHERE "isOpen"=true;
+          WHERE "isOpen"=true
     `);
     const reportArr = reports.map((report) => {
       return report.id;
@@ -52,16 +52,19 @@ async function getOpenReports() {
     const { rows: comments } = await client.query(`
           SELECT * 
           FROM comments
-          WHERE "reportId" IN (${reportArr.join(', ')});
+          WHERE "reportId" 
+          IN (${reportArr.join(', ')});   
     `);
 
     console.log({comments})
     
     const newReports = reports.map(report => {
-        const reportComments = comments.map(comment => {
-          return comment.reportId === report.id;
+      report.comments = [];
+        comments.forEach(comment => {
+           if (comment.reportId === report.id) {
+            report.comments.push(comment);
+          };
         })
-          report.comments = reportComments;
 
         if (Date.parse(report.expirationDate) < new Date()) {
           report.isExpired = true
@@ -141,6 +144,13 @@ async function _getReport(reportId) {
         FROM reports
         WHERE id=${reportId};
     `)
+
+    if (!report) {
+      throw {
+        name: "ReportNotFoundError",
+        message: "Could not find a report with that reportId"
+      };
+    }
     return report;
   } catch (error) {
     throw error;
@@ -176,32 +186,30 @@ async function closeReport(reportId, password) {
     // Return a message stating that the report has been closed
     
     const report = await _getReport(reportId);
-    if (!report) {
-      throw {
-        name: "ReportNotFoundError",
-        message: "Could not find a report with that reportId"
-      };
+    console.log(_getReport(9));
+    if (report == undefined || report == null) {
+      throw new Error("Report does not exist with that id");
     }
-    if (report.password !== password) {
-      throw {
-        name: "PasswordMatchError",
-        message: "The passwords did not match"
-      };
+    if (password !== report.password) {
+      throw Error("Password incorrect for this report, please try again");
     }
     if (!report.isOpen) {
-      throw {
-        name: "ReportClosedError",
-        message: "The report is already closed"
-      };
-    };
+      throw Error("This report has already been closed");
+    }
 
-    report.isOpen = false;
-    return {  name: "Closing Success", message: "Report has been closed" }
+    const resp = await client.query(`
+        UPDATE reports
+        SET "isOpen"=false
+        WHERE id=${ reportId };
+    `);
+
+    return { message: "Report successfully closed!" }
 
   } catch (error) {
     throw error;
   }
 }
+
 
 /**
  * Comment Related Methods
@@ -240,37 +248,25 @@ async function createReportComment(reportId, commentFields) {
     // finally, return the comment
     const report = await _getReport(reportId);
     if (!report) {
-      throw {
-        name: "ReportNotFoundError",
-        message: "That report does not exist, no comment has been made"
-      };
+      throw Error("That report does not exist, no comment has been made") 
     }
-  
     if (!report.isOpen) {
-      throw {
-        name: "ReportClosedError",
-        message: "That report has been closed, no comment has been made"
-      };
-    };
-
+      throw Error("That report has been closed, no comment has been made")
+    }
     if (Date.parse(report.expirationDate) < new Date()) {
-      throw {
-        name: "ReportExpiredError",
-        message: "The discussion time on this report has expired, no comment has been made"
-      };
-    };
+      throw Error("The discussion time on this report has expired, no comment has been made")
+    }
     
-    const { rows: [ comment ] } = await client.query(`
-        INSERT INTO comments(content)
-        VALUES($1)
+    const { rows: [comment] } = await client.query(`
+        INSERT INTO comments(content, "reportId")
+        VALUES($1, $2)
         RETURNING *;
-    ` ,[content]);
+    ` ,[content, reportId]);
 
-    comment.reportId = reportId;
-    
     const extension = new Date();
     extension.setDate(extension.getDate()+1);
     report.expirationDate = Date.parse(extension);
+
     console.log(comment)
     return comment;
   } catch (error) {
