@@ -261,7 +261,6 @@ async function createReportComment(reportId, commentFields) {
     extension.setDate(extension.getDate()+1);
     report.expirationDate = Date.parse(extension);
 
-    console.log(comment)
     return comment;
   } catch (error) {
     throw error;
