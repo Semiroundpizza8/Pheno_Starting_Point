@@ -23,19 +23,19 @@ const client = new Client(CONNECTION_STRING);
 async function getOpenReports() {
   try {
     // first load all of the reports which are open
-    const {rows} = await client.query(`
-      SELECT * FROM reports
+    const {rows: reports} = await client.query(`
+      SELECT *
+      FROM reports
       WHERE "isOpen"=true;
     `);
-    console.log("filtered reports: ", rows);
     
     // then load the comments only for those reports, using a
     // WHERE "reportId" IN () clause
-
-    // const {rows: [comment]} = await client.query(`
-    //   SELECT * FROM comments
-    //   WHERE 
-    // `)
+    const {rows: comments} = await client.query(`
+      SELECT *
+      FROM comments
+      WHERE "reportId" IN (${reports.map(report => report.id).join(', ')});
+    `);
     
     // then, build two new properties on each report:
     // .comments for the comments which go with it
@@ -43,10 +43,25 @@ async function getOpenReports() {
     // .isExpired if the expiration date is before now
     //    you can use Date.parse(report.expirationDate) < new Date()
     // also, remove the password from all reports
+    reports.map(report => {
+      if (Date.parse(report.expirationDate) < new Date()) {
+        report.isExpired = true;
+      } else {
+        report.isExpired = false;
+      };
 
+      report.comments = [];
+      comments.map(comment => {
+        if (comment.reportId === report.id) {
+          report.comments = [...report.comments, comment];
+        };
+      })
+
+      delete report.password;
+    })
 
     // finally, return the reports
-    return rows;  
+    return reports;  
 
   } catch (error) {
     throw error;
@@ -84,9 +99,7 @@ async function createReport(reportFields) {
     `, [title, location, description, password]); 
 
     // remove the password from the returned row
-    console.log("report with pass: ", report);
     delete report.password;
-    console.log("Report without pass: ", report);
 
     // return the new report
     return report;
@@ -113,11 +126,13 @@ async function createReport(reportFields) {
 async function _getReport(reportId) {
   try {
     // SELECT the report with id equal to reportId
+    const {rows: [report]} = await client.query(`
+      SELECT * FROM reports
+      WHERE id=$1;
+    `, [reportId])
     
-
     // return the report
-    
-
+    return report;
   } catch (error) {
     throw error;
   }
@@ -135,10 +150,7 @@ async function _getReport(reportId) {
 async function closeReport(reportId, password) {
   try {
     // First, actually grab the report with that id
-    const {rows: [report]} = await client.query(`
-      SELECT * FROM reports
-      WHERE id=$1;
-    `, [reportId]);
+    const report = await _getReport(reportId);
     
     // If it doesn't exist, throw an error with a useful message
     // If the passwords don't match, throw an error
@@ -160,8 +172,6 @@ async function closeReport(reportId, password) {
 
       return "Report successfully closed!";
     }
-    
-
   } catch (error) {
     throw error;
   }
@@ -181,14 +191,10 @@ async function closeReport(reportId, password) {
 async function createReportComment(reportId, commentFields) {
   // read off the content from the commentFields
   const content = commentFields.content;
-  console.log("comment: ", content);
 
   try {
     // grab the report we are going to be commenting on
-    const {rows: [report]} = await client.query(`
-      SELECT * FROM reports
-      WHERE id=$1;
-    `, [reportId]);
+    const report = await _getReport(reportId);
 
     // if it wasn't found, throw an error saying so
     // if it is not open, throw an error saying so
@@ -216,11 +222,8 @@ async function createReportComment(reportId, commentFields) {
         WHERE id=$1;
       `, [reportId]);
 
-      console.log("comment: ", comment);
-      console.log("report with new comment and expirationDate: ", report);
       return comment;
     }
-
   } catch (error) {
     throw error;
   }
