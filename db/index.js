@@ -144,13 +144,7 @@ async function _getReport(reportId) {
         FROM reports
         WHERE id=${reportId};
     `)
-
-    if (!report) {
-      throw {
-        name: "ReportNotFoundError",
-        message: "Could not find a report with that reportId"
-      };
-    }
+  
     return report;
   } catch (error) {
     throw error;
@@ -186,8 +180,8 @@ async function closeReport(reportId, password) {
     // Return a message stating that the report has been closed
     
     const report = await _getReport(reportId);
-    console.log(_getReport(9));
-    if (report == undefined || report == null) {
+
+    if (!report) {
       throw new Error("Report does not exist with that id");
     }
     if (password !== report.password) {
