@@ -1,9 +1,13 @@
 // Require the Client constructor from the pg package
+const { Client } = require('pg');
 
 // Create a constant, CONNECTION_STRING, from either process.env.DATABASE_URL or postgres://localhost:5432/phenomena-dev
+const CONNECTION_STRING = (process.env.DATABASE_URL || 'postgres:localhost:5432/phenomena-dev')
 
 // Create the client using new Client(CONNECTION_STRING)
 // Do not connect to the client in this file!
+const client = new Client(CONNECTION_STRING);
+
 
 /**
  * Report Related Methods
@@ -35,8 +39,39 @@ async function getOpenReports() {
 
 
     // finally, return the reports
-  
+    
+    const { rows: reports } = await client.query(`
+          SELECT *
+          FROM reports
+          WHERE "isOpen"=true;
+    `);
+    const reportArr = reports.map((report) => {
+      return report.id;
+    });
 
+    const { rows: comments } = await client.query(`
+          SELECT * 
+          FROM comments
+          WHERE "reportId" IN (${reportArr.join(', ')});
+    `);
+
+    console.log({comments})
+    
+    const newReports = reports.map(report => {
+        const reportComments = comments.map(comment => {
+          return comment.reportId === report.id;
+        })
+          report.comments = reportComments;
+
+        if (Date.parse(report.expirationDate) < new Date()) {
+          report.isExpired = true
+        }
+
+        delete report.password;
+        return report;
+    })
+    
+    return newReports;
   } catch (error) {
     throw error;
   }
@@ -66,7 +101,15 @@ async function createReport(reportFields) {
     
 
     // return the new report
-    
+    const { title, location, description, password } = reportFields;
+
+    const { rows: [report] } = await client.query(`
+        INSERT INTO reports(title, location, description, password)
+        VALUES($1, $2, $3, $4)
+        RETURNING *;
+    `, [title, location, description, password])
+      delete report.password;
+      return report;
 
   } catch (error) {
     throw error;
@@ -93,8 +136,12 @@ async function _getReport(reportId) {
     
 
     // return the report
-    
-
+    const { rows: [ report ] } = await client.query(`
+        SELECT *
+        FROM reports
+        WHERE id=${reportId};
+    `)
+    return report;
   } catch (error) {
     throw error;
   }
@@ -128,6 +175,28 @@ async function closeReport(reportId, password) {
 
     // Return a message stating that the report has been closed
     
+    const report = await _getReport(reportId);
+    if (!report) {
+      throw {
+        name: "ReportNotFoundError",
+        message: "Could not find a report with that reportId"
+      };
+    }
+    if (report.password !== password) {
+      throw {
+        name: "PasswordMatchError",
+        message: "The passwords did not match"
+      };
+    }
+    if (!report.isOpen) {
+      throw {
+        name: "ReportClosedError",
+        message: "The report is already closed"
+      };
+    };
+
+    report.isOpen = false;
+    return {  name: "Closing Success", message: "Report has been closed" }
 
   } catch (error) {
     throw error;
@@ -147,11 +216,10 @@ async function closeReport(reportId, password) {
  */
 async function createReportComment(reportId, commentFields) {
   // read off the content from the commentFields
-
+  const { content } = commentFields
 
   try {
     // grab the report we are going to be commenting on
-
 
     // if it wasn't found, throw an error saying so
     
@@ -170,11 +238,52 @@ async function createReportComment(reportId, commentFields) {
     
 
     // finally, return the comment
-    
+    const report = await _getReport(reportId);
+    if (!report) {
+      throw {
+        name: "ReportNotFoundError",
+        message: "That report does not exist, no comment has been made"
+      };
+    }
+  
+    if (!report.isOpen) {
+      throw {
+        name: "ReportClosedError",
+        message: "That report has been closed, no comment has been made"
+      };
+    };
 
+    if (Date.parse(report.expirationDate) < new Date()) {
+      throw {
+        name: "ReportExpiredError",
+        message: "The discussion time on this report has expired, no comment has been made"
+      };
+    };
+    
+    const { rows: [ comment ] } = await client.query(`
+        INSERT INTO comments(content)
+        VALUES($1)
+        RETURNING *;
+    ` ,[content]);
+
+    comment.reportId = reportId;
+    
+    const extension = new Date();
+    extension.setDate(extension.getDate()+1);
+    report.expirationDate = Date.parse(extension);
+    console.log(comment)
+    return comment;
   } catch (error) {
     throw error;
   }
 }
 
 // export the client and all database functions below
+module.exports = {
+  client,
+  getOpenReports,
+  createReport,
+  createReportComment,
+  _getReport,
+  closeReport
+}
