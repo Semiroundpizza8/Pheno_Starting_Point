@@ -185,12 +185,12 @@ async function testDB() {
     
     /* Each of these lines should throw an error when uncommented */
     
-    // console.log("Closing report with id 1 even though it is closed", await closeReport(1, "51isTheKey"));
-    // console.log("Closing report with id 2 with incorrect password", await closeReport(2, "bad password"));
-    // console.log("Closing report with id 300 even though it doesn't exist", await closeReport(300, "does not matter"));
-    // console.log("Commenting on closed report", await createReportComment(1, { content: "should we meet up and chat?" }));
-    // console.log("Commenting on expired report", await createReportComment(3, { content: "you read too much" })); 
-    // console.log("Creating report with missing info", await createReport({ title: "abc", location: "abc", description: "abc" }));
+    console.log("Closing report with id 1 even though it is closed", await closeReport(1, "51isTheKey"));
+    console.log("Closing report with id 2 with incorrect password", await closeReport(2, "bad password"));
+    console.log("Closing report with id 300 even though it doesn't exist", await closeReport(300, "does not matter"));
+    console.log("Commenting on closed report", await createReportComment(1, { content: "should we meet up and chat?" }));
+    console.log("Commenting on expired report", await createReportComment(3, { content: "you read too much" })); 
+    console.log("Creating report with missing info", await createReport({ title: "abc", location: "abc", description: "abc" }));
 
     console.log("Finished filling DB!");
   } catch (error) {
