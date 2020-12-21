@@ -1,5 +1,5 @@
 const {Client} = require('pg');
-const CONNECTION_STRING = "postgres://localhost:5432/phenomena_dev";
+const CONNECTION_STRING = "postgres://localhost:5432/phenomena-dev";
 const client = new Client(CONNECTION_STRING);
 
 /**
@@ -111,7 +111,7 @@ async function closeReport(reportId, password) {
  */
 
 async function createReportComment(reportId, commentFields) {
-  const content = commentFields.content;
+  //const content = commentFields.content;
 
   try {
     const report = await _getReport(reportId);
@@ -130,7 +130,7 @@ async function createReportComment(reportId, commentFields) {
       INSERT INTO comments("reportId", content)
       VALUES ($1, $2)
       RETURNING *;
-    `, [reportId, content]);
+    `, [reportId, commentFields.content]);
 
     await client.query(`
       UPDATE reports
