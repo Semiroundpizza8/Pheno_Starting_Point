@@ -3,11 +3,10 @@ const express = require('express');
 const apiRouter = express.Router();
 
 // Import the database adapter functions from the db
-const { client,
+const { 
     getOpenReports,
     createReport,
     createReportComment,
-    _getReport,
     closeReport } = require('../db');
 
 /**
